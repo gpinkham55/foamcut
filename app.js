@@ -18,6 +18,12 @@ const state = {
   file: null,
   svgBlob: null,
   loadedImg: null,        // HTMLImageElement of the uploaded photo
+  corrections: {
+    brightness: 0,        // -100 to +100
+    contrast:   0,        // -100 to +100
+    rotation:   0,        // degrees
+    threshold:  0,        // 0 = auto (Otsu), 1-255 = manual
+  },
 };
 
 // ── DOM refs ───────────────────────────────────────────────────
@@ -41,6 +47,19 @@ const heightInput     = document.getElementById('height-in');
 const offsetInput     = document.getElementById('offset-mm');
 const cvCanvas        = document.getElementById('cv-canvas');
 
+// Corrections
+const correctionsSection  = document.getElementById('corrections-section');
+const corrBrightness      = document.getElementById('corr-brightness');
+const corrContrast        = document.getElementById('corr-contrast');
+const corrRotation        = document.getElementById('corr-rotation');
+const corrThreshold       = document.getElementById('corr-threshold');
+const valBrightness       = document.getElementById('val-brightness');
+const valContrast         = document.getElementById('val-contrast');
+const valRotation         = document.getElementById('val-rotation');
+const valThreshold        = document.getElementById('val-threshold');
+const resetCorrections    = document.getElementById('reset-corrections');
+const correctionCanvas    = document.getElementById('correction-canvas');
+
 // Debug viewer
 const debugViewer     = document.getElementById('debug-viewer');
 const canvasOriginal  = document.getElementById('canvas-original');
@@ -56,11 +75,15 @@ function setFile(file) {
   previewImg.src = url;
 
   const img = new Image();
-  img.onload = () => { state.loadedImg = img; };
+  img.onload = () => {
+    state.loadedImg = img;
+    renderCorrectionPreview();
+  };
   img.src = url;
 
   dropInner.classList.add('hidden');
   previewInner.classList.remove('hidden');
+  correctionsSection.classList.remove('hidden');
   updateProcessBtn();
 }
 
@@ -118,6 +141,77 @@ downloadDebugBtn.addEventListener('click', () => {
   composite.toBlob(blob => downloadBlob(blob, 'foamcut-debug.png'), 'image/png');
 });
 
+// ── Image Corrections ──────────────────────────────────────────
+
+function renderCorrectionPreview() {
+  if (!state.loadedImg) return;
+  applyCorrectionsToCanvas(state.loadedImg, correctionCanvas, state.corrections);
+}
+
+// Apply brightness / contrast / rotation to a source image and draw to dest canvas
+function applyCorrectionsToCanvas(img, destCanvas, corr) {
+  const { brightness, contrast, rotation } = corr;
+
+  // Work on an offscreen canvas so rotation doesn't clip
+  const rad    = (rotation * Math.PI) / 180;
+  const sin    = Math.abs(Math.sin(rad));
+  const cos    = Math.abs(Math.cos(rad));
+  const rotW   = Math.ceil(img.naturalWidth * cos + img.naturalHeight * sin);
+  const rotH   = Math.ceil(img.naturalWidth * sin + img.naturalHeight * cos);
+
+  const off = document.createElement('canvas');
+  off.width  = rotW;
+  off.height = rotH;
+  const ctx = off.getContext('2d');
+
+  // Rotate around center
+  ctx.translate(rotW / 2, rotH / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  // Brightness / contrast via CSS filter on the final canvas
+  // contrast(x): x = 1 is normal; map -100..+100 → 0..2
+  const contrastVal   = 1 + (contrast / 100);
+  // brightness(x): x = 1 is normal; map -100..+100 → 0..2
+  const brightnessVal = 1 + (brightness / 100);
+
+  destCanvas.width  = rotW;
+  destCanvas.height = rotH;
+  const dctx = destCanvas.getContext('2d');
+  dctx.filter = `brightness(${brightnessVal}) contrast(${contrastVal})`;
+  dctx.drawImage(off, 0, 0);
+  dctx.filter = 'none';
+}
+
+// Slider wiring
+function bindSlider(input, valEl, transform, key) {
+  input.addEventListener('input', () => {
+    const raw = parseFloat(input.value);
+    state.corrections[key] = key === 'threshold' ? raw : raw;
+    valEl.textContent = transform(raw);
+    renderCorrectionPreview();
+  });
+}
+
+bindSlider(corrBrightness, valBrightness, v => (v >= 0 ? `+${v}` : `${v}`),  'brightness');
+bindSlider(corrContrast,   valContrast,   v => (v >= 0 ? `+${v}` : `${v}`),  'contrast');
+bindSlider(corrRotation,   valRotation,   v => `${v}°`,                        'rotation');
+bindSlider(corrThreshold,  valThreshold,  v => (v === 0 ? 'Auto' : `${v}`),   'threshold');
+
+resetCorrections.addEventListener('click', () => {
+  corrBrightness.value = 0;
+  corrContrast.value   = 0;
+  corrRotation.value   = 0;
+  corrThreshold.value  = 0;
+  valBrightness.textContent = '0';
+  valContrast.textContent   = '0';
+  valRotation.textContent   = '0°';
+  valThreshold.textContent  = 'Auto';
+  state.corrections = { brightness: 0, contrast: 0, rotation: 0, threshold: 0 };
+  renderCorrectionPreview();
+});
+
 // ── Main process ───────────────────────────────────────────────
 processBtn.addEventListener('click', runPipeline);
 
@@ -152,9 +246,9 @@ async function runPipelineInner() {
   const heightIn = parseFloat(heightInput.value) || 14;
   const offsetMm = parseFloat(offsetInput.value) ?? 2;
 
-  // ── Load image into OpenCV ─────────────────────────────────
+  // ── Load image into OpenCV (with corrections applied) ─────
   const img = await loadImage(state.file);
-  drawToCanvas(cvCanvas, img);
+  applyCorrectionsToCanvas(img, cvCanvas, state.corrections);
   const src = cv.imread(cvCanvas);
 
   // ── Grid calibration ───────────────────────────────────────
@@ -172,8 +266,14 @@ async function runPipelineInner() {
   const blurred = new cv.Mat();
   cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
 
+  // Threshold — manual override if set, otherwise Otsu auto
   const binary = new cv.Mat();
-  cv.threshold(blurred, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  const manualThresh = state.corrections.threshold;
+  if (manualThresh > 0) {
+    cv.threshold(blurred, binary, manualThresh, 255, cv.THRESH_BINARY_INV);
+  } else {
+    cv.threshold(blurred, binary, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+  }
 
   const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(9, 9));
   const closed = new cv.Mat();

@@ -34,9 +34,60 @@
         </div>
       </section>
 
+      <!-- Step 1b: Image Corrections (shown after upload) -->
+      <section class="card hidden" id="corrections-section">
+        <h2>
+          <span class="step">✦</span> Image Corrections
+          <button class="link-btn reset-btn" id="reset-corrections">Reset</button>
+        </h2>
+        <div class="corrections-grid">
+
+          <div class="correction-row">
+            <label for="corr-brightness">Brightness</label>
+            <div class="slider-track">
+              <input type="range" id="corr-brightness" min="-100" max="100" step="1" value="0" />
+            </div>
+            <span class="slider-val" id="val-brightness">0</span>
+          </div>
+
+          <div class="correction-row">
+            <label for="corr-contrast">Contrast</label>
+            <div class="slider-track">
+              <input type="range" id="corr-contrast" min="-100" max="100" step="1" value="0" />
+            </div>
+            <span class="slider-val" id="val-contrast">0</span>
+          </div>
+
+          <div class="correction-row">
+            <label for="corr-rotation">Rotation</label>
+            <div class="slider-track">
+              <input type="range" id="corr-rotation" min="-45" max="45" step="0.5" value="0" />
+            </div>
+            <span class="slider-val" id="val-rotation">0°</span>
+          </div>
+
+          <div class="correction-row">
+            <label for="corr-threshold">
+              Threshold
+              <span class="label-hint">override auto</span>
+            </label>
+            <div class="slider-track">
+              <input type="range" id="corr-threshold" min="0" max="255" step="1" value="0" />
+            </div>
+            <span class="slider-val" id="val-threshold">Auto</span>
+          </div>
+
+        </div>
+
+        <!-- Live corrected preview -->
+        <div class="correction-preview" id="correction-preview-wrap">
+          <canvas id="correction-canvas"></canvas>
+        </div>
+      </section>
+
       <!-- Step 2: Settings -->
       <section class="card" id="settings-section">
-        <h2><span class="step">2</span> Drawer Dimensions &amp; Options</h2>
+        <h2><span class="step">2</span> Drawer Dimensions</h2>
         <div class="settings-grid">
           <label>
             <span>Drawer width (inches)</span>
