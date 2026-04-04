@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FoamCut — Tool Drawer SVG Generator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>FoamCut</h1>
+      <p class="subtitle">Photograph your tools on a backlit 5mm grid — get a cut-ready SVG.</p>
+    </header>
+
+    <main>
+      <!-- Step 1: Upload -->
+      <section class="card" id="upload-section">
+        <h2><span class="step">1</span> Upload Photo</h2>
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" accept="image/*" hidden />
+          <div class="drop-inner" id="drop-inner">
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 16V8m0 0L9 11m3-3 3 3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M20.25 14.75v2.5A2.75 2.75 0 0 1 17.5 20h-11a2.75 2.75 0 0 1-2.75-2.75v-2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <p>Drag &amp; drop or <button class="link-btn" id="browse-btn">browse</button></p>
+            <p class="hint">Top-down photo of tools on a backlit 5mm grid</p>
+          </div>
+          <div class="preview-inner hidden" id="preview-inner">
+            <img id="preview-img" alt="Uploaded photo" />
+            <button class="link-btn change-btn" id="change-btn">Change photo</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: Settings -->
+      <section class="card" id="settings-section">
+        <h2><span class="step">2</span> Drawer Dimensions &amp; Options</h2>
+        <div class="settings-grid">
+          <label>
+            <span>Drawer width (inches)</span>
+            <input type="number" id="width-in" min="1" max="60" step="0.25" value="20" />
+          </label>
+          <label>
+            <span>Drawer height (inches)</span>
+            <input type="number" id="height-in" min="1" max="60" step="0.25" value="14" />
+          </label>
+          <label>
+            <span>Foam offset (mm)</span>
+            <input type="number" id="offset-mm" min="0" max="20" step="0.5" value="2" />
+            <small>Outward pocket clearance</small>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="debug-toggle" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span>Debug overlay</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Step 3: Process -->
+      <section class="card" id="process-section">
+        <h2><span class="step">3</span> Generate SVG</h2>
+        <button class="primary-btn" id="process-btn" disabled>
+          <span id="btn-label">Process Image</span>
+          <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+        <div id="status-area" class="status-area hidden">
+          <div id="status-log"></div>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section class="card hidden" id="results-section">
+        <h2>Results</h2>
+        <div class="results-grid">
+          <div class="result-item">
+            <p class="result-label" id="tool-count-label"></p>
+            <button class="primary-btn" id="download-svg-btn">Download SVG</button>
+          </div>
+          <div class="result-item hidden" id="debug-result">
+            <p class="result-label">Debug overlay</p>
+            <canvas id="debug-canvas"></canvas>
+            <button class="secondary-btn" id="download-debug-btn">Download PNG</button>
+          </div>
+        </div>
+        <div id="warnings-area" class="warnings hidden"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Runs entirely in your browser — no uploads, no server.</p>
+    </footer>
+  </div>
+
+  <!-- Hidden canvas for OpenCV processing -->
+  <canvas id="cv-canvas" style="display:none"></canvas>
+
+  <!-- OpenCV.js (WASM) -->
+  <script>
+    // Show loading state until OpenCV is ready
+    window.onOpenCvReady = function() {
+      document.getElementById('process-btn').dataset.cvReady = 'true';
+      updateProcessBtn();
+    };
+  </script>
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="window.onOpenCvReady()"></script>
+  <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
