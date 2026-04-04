@@ -283,23 +283,6 @@ input:checked ~ .toggle-track .toggle-thumb {
   background: #fff;
 }
 
-/* ── Status / Log ──────────────────────────────────────── */
-.status-area {
-  margin-top: 1rem;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 1rem;
-  font-size: 0.82rem;
-  font-family: 'Fira Code', 'Cascadia Code', monospace;
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.log-line { margin-bottom: 0.2rem; color: var(--muted); }
-.log-line.ok { color: var(--success); }
-.log-line.warn { color: var(--warn); }
-.log-line.err { color: var(--danger); }
 
 /* ── Spinner ───────────────────────────────────────────── */
 .spinner {
@@ -314,28 +297,114 @@ input:checked ~ .toggle-track .toggle-thumb {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Results ───────────────────────────────────────────── */
-.results-grid {
+.results-header {
   display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
-  gap: 1.25rem;
-  align-items: flex-start;
 }
 
-.result-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
+.results-header h2 { margin-bottom: 0; }
 
 .result-label {
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   color: var(--muted);
 }
 
-#debug-canvas {
-  max-width: 100%;
-  border-radius: var(--radius-sm);
+.download-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+/* ── Debug Viewer ──────────────────────────────────────── */
+.debug-viewer {
   border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.layer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.toolbar-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-right: 0.25rem;
+}
+
+.layer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.layer-btn.active {
+  border-color: transparent;
+  color: var(--text);
+}
+
+.layer-btn#toggle-original.active { background: rgba(79, 124, 255, 0.15); }
+.layer-btn#toggle-overlay.active  { background: rgba(52, 211, 153, 0.15); }
+
+.layer-btn:not(.active) {
+  opacity: 0.45;
+}
+
+.layer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-original { background: #4f7cff; }
+.dot-overlay  { background: #34d399; }
+
+/* ── Canvas stack ──────────────────────────────────────── */
+.canvas-stack {
+  position: relative;
+  width: 100%;
+  background: #000;
+  line-height: 0; /* collapse inline-block gap */
+}
+
+.canvas-stack canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  transition: opacity 0.2s ease;
+}
+
+/* Overlay canvas sits on top of the original */
+#canvas-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* ── Warnings ──────────────────────────────────────────── */

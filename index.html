@@ -51,11 +51,6 @@
             <input type="number" id="offset-mm" min="0" max="20" step="0.5" value="2" />
             <small>Outward pocket clearance</small>
           </label>
-          <label class="toggle-label">
-            <input type="checkbox" id="debug-toggle" />
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span>Debug overlay</span>
-          </label>
         </div>
       </section>
 
@@ -66,25 +61,41 @@
           <span id="btn-label">Process Image</span>
           <span id="btn-spinner" class="spinner hidden"></span>
         </button>
-        <div id="status-area" class="status-area hidden">
-          <div id="status-log"></div>
-        </div>
       </section>
 
       <!-- Results -->
       <section class="card hidden" id="results-section">
-        <h2>Results</h2>
-        <div class="results-grid">
-          <div class="result-item">
-            <p class="result-label" id="tool-count-label"></p>
-            <button class="primary-btn" id="download-svg-btn">Download SVG</button>
+        <div class="results-header">
+          <h2>Results</h2>
+          <p class="result-label" id="tool-count-label"></p>
+        </div>
+
+        <!-- Download row -->
+        <div class="download-row">
+          <button class="primary-btn" id="download-svg-btn">Download SVG</button>
+          <button class="secondary-btn hidden" id="download-debug-btn">Download PNG</button>
+        </div>
+
+        <!-- Debug viewer -->
+        <div class="debug-viewer hidden" id="debug-viewer">
+          <!-- Layer toggle toolbar -->
+          <div class="layer-toolbar">
+            <span class="toolbar-label">Layers</span>
+            <button class="layer-btn active" id="toggle-original" data-layer="original">
+              <span class="layer-dot dot-original"></span> Original photo
+            </button>
+            <button class="layer-btn active" id="toggle-overlay" data-layer="overlay">
+              <span class="layer-dot dot-overlay"></span> Outline overlay
+            </button>
           </div>
-          <div class="result-item hidden" id="debug-result">
-            <p class="result-label">Debug overlay</p>
-            <canvas id="debug-canvas"></canvas>
-            <button class="secondary-btn" id="download-debug-btn">Download PNG</button>
+
+          <!-- Stacked canvas container -->
+          <div class="canvas-stack" id="canvas-stack">
+            <canvas id="canvas-original"></canvas>
+            <canvas id="canvas-overlay"></canvas>
           </div>
         </div>
+
         <div id="warnings-area" class="warnings hidden"></div>
       </section>
     </main>
@@ -99,7 +110,6 @@
 
   <!-- OpenCV.js (WASM) -->
   <script>
-    // Show loading state until OpenCV is ready
     window.onOpenCvReady = function() {
       document.getElementById('process-btn').dataset.cvReady = 'true';
       updateProcessBtn();
