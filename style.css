@@ -208,13 +208,15 @@ footer {
 .change-btn { font-size: 0.85rem; }
 
 /* ── Image Corrections ─────────────────────────────────── */
-#corrections-section h2 {
-  justify-content: space-between;
+.process-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
 }
 
 .reset-btn {
   font-size: 0.8rem;
-  margin-left: auto;
   color: var(--muted);
 }
 

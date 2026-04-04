@@ -34,12 +34,30 @@
         </div>
       </section>
 
-      <!-- Step 1b: Image Corrections (shown after upload) -->
-      <section class="card hidden" id="corrections-section">
-        <h2>
-          <span class="step">✦</span> Image Corrections
-          <button class="link-btn reset-btn" id="reset-corrections">Reset</button>
-        </h2>
+      <!-- Step 2: Settings -->
+      <section class="card" id="settings-section">
+        <h2><span class="step">2</span> Drawer Dimensions</h2>
+        <div class="settings-grid">
+          <label>
+            <span>Drawer width (inches)</span>
+            <input type="number" id="width-in" min="1" max="60" step="0.25" value="20" />
+          </label>
+          <label>
+            <span>Drawer height (inches)</span>
+            <input type="number" id="height-in" min="1" max="60" step="0.25" value="14" />
+          </label>
+          <label>
+            <span>Foam offset (mm)</span>
+            <input type="number" id="offset-mm" min="0" max="20" step="0.5" value="2" />
+            <small>Outward pocket clearance</small>
+          </label>
+        </div>
+      </section>
+
+      <!-- Step 3: Image Corrections + Process -->
+      <section class="card hidden" id="process-section">
+        <h2><span class="step">3</span> Image Corrections &amp; Process</h2>
+
         <div class="corrections-grid">
 
           <div class="correction-row">
@@ -80,38 +98,18 @@
         </div>
 
         <!-- Live corrected preview -->
-        <div class="correction-preview" id="correction-preview-wrap">
+        <div class="correction-preview">
           <canvas id="correction-canvas"></canvas>
         </div>
-      </section>
 
-      <!-- Step 2: Settings -->
-      <section class="card" id="settings-section">
-        <h2><span class="step">2</span> Drawer Dimensions</h2>
-        <div class="settings-grid">
-          <label>
-            <span>Drawer width (inches)</span>
-            <input type="number" id="width-in" min="1" max="60" step="0.25" value="20" />
-          </label>
-          <label>
-            <span>Drawer height (inches)</span>
-            <input type="number" id="height-in" min="1" max="60" step="0.25" value="14" />
-          </label>
-          <label>
-            <span>Foam offset (mm)</span>
-            <input type="number" id="offset-mm" min="0" max="20" step="0.5" value="2" />
-            <small>Outward pocket clearance</small>
-          </label>
+        <!-- Process row -->
+        <div class="process-row">
+          <button class="primary-btn" id="process-btn" disabled>
+            <span id="btn-label">Process Image</span>
+            <span id="btn-spinner" class="spinner hidden"></span>
+          </button>
+          <button class="link-btn reset-btn" id="reset-corrections">Reset corrections</button>
         </div>
-      </section>
-
-      <!-- Step 3: Process -->
-      <section class="card" id="process-section">
-        <h2><span class="step">3</span> Generate SVG</h2>
-        <button class="primary-btn" id="process-btn" disabled>
-          <span id="btn-label">Process Image</span>
-          <span id="btn-spinner" class="spinner hidden"></span>
-        </button>
       </section>
 
       <!-- Results -->
@@ -121,7 +119,6 @@
           <p class="result-label" id="tool-count-label"></p>
         </div>
 
-        <!-- Download row -->
         <div class="download-row">
           <button class="primary-btn" id="download-svg-btn">Download SVG</button>
           <button class="secondary-btn hidden" id="download-debug-btn">Download PNG</button>
@@ -129,7 +126,6 @@
 
         <!-- Debug viewer -->
         <div class="debug-viewer hidden" id="debug-viewer">
-          <!-- Layer toggle toolbar -->
           <div class="layer-toolbar">
             <span class="toolbar-label">Layers</span>
             <button class="layer-btn active" id="toggle-original" data-layer="original">
@@ -139,15 +135,11 @@
               <span class="layer-dot dot-overlay"></span> Outline overlay
             </button>
           </div>
-
-          <!-- Stacked canvas container -->
           <div class="canvas-stack" id="canvas-stack">
             <canvas id="canvas-original"></canvas>
             <canvas id="canvas-overlay"></canvas>
           </div>
         </div>
-
-        <div id="warnings-area" class="warnings hidden"></div>
       </section>
     </main>
 
@@ -156,10 +148,8 @@
     </footer>
   </div>
 
-  <!-- Hidden canvas for OpenCV processing -->
   <canvas id="cv-canvas" style="display:none"></canvas>
 
-  <!-- OpenCV.js (WASM) -->
   <script>
     window.onOpenCvReady = function() {
       document.getElementById('process-btn').dataset.cvReady = 'true';
