@@ -257,19 +257,21 @@ async function enhanceWithGemini(canvas) {
   return returnedImg;
 }
 
-// ── CLAHE local fallback ───────────────────────────────────────
+// ── Local enhancement fallback (no CLAHE in OpenCV.js WASM) ────
+// Grayscale → equalizeHist → normalize → back to RGBA
 function autoEnhanceCLAHE(rgbaMat) {
   const gray = new cv.Mat();
   cv.cvtColor(rgbaMat, gray, cv.COLOR_RGBA2GRAY);
 
-  const clahe = cv.createCLAHE(3.0, new cv.Size(8, 8));
-  const claheOut = new cv.Mat();
-  clahe.apply(gray, claheOut);
-  clahe.delete(); gray.delete();
+  // Global histogram equalization (available in all OpenCV.js builds)
+  const equalized = new cv.Mat();
+  cv.equalizeHist(gray, equalized);
+  gray.delete();
 
+  // Normalize to full 0-255 range
   const norm = new cv.Mat();
-  cv.normalize(claheOut, norm, 0, 255, cv.NORM_MINMAX, cv.CV_8U);
-  claheOut.delete();
+  cv.normalize(equalized, norm, 0, 255, cv.NORM_MINMAX, cv.CV_8U);
+  equalized.delete();
 
   const rgba = new cv.Mat();
   cv.cvtColor(norm, rgba, cv.COLOR_GRAY2RGBA);
