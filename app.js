@@ -1,14 +1,14 @@
 /* ─────────────────────────────────────────────────────────────
    FoamCut — app.js
    Pipeline:
-     1. Load image → OpenCV Mat (with corrections applied)
-     2. Detect 5mm backlit grid → pixels-per-mm calibration
-     3. Otsu / manual threshold → contours
-     4. Filter by area — process ALL valid contours (no overlap skip)
+     1. Load image → apply user corrections (rotation, brightness, contrast)
+     2. Gemini AI enhance → high-contrast grayscale (fallback: CLAHE)
+     3. Detect 5mm backlit grid → pixels-per-mm calibration
+     4. Otsu / manual threshold → contours
      5. approxPolyDP smoothing
      6. Clipper.js outward offset
      7. SVG generation (2 paths per tool: exact + offset)
-     8. Layered debug viewer (original + overlay, independently togglable)
+     8. Layered debug viewer (enhanced + overlay, independently togglable)
    ───────────────────────────────────────────────────────────── */
 
 'use strict';
@@ -19,10 +19,10 @@ const state = {
   svgBlob: null,
   loadedImg: null,
   corrections: {
-    brightness: 0,   // -100 to +100
-    contrast:   0,   // -100 to +100
-    rotation:   0,   // degrees
-    threshold:  0,   // 0 = Otsu auto, 1-255 = manual
+    brightness: 0,
+    contrast:   0,
+    rotation:   0,
+    threshold:  0,
   },
 };
 
@@ -45,6 +45,7 @@ const downloadDebugBtn= document.getElementById('download-debug-btn');
 const widthInput      = document.getElementById('width-in');
 const heightInput     = document.getElementById('height-in');
 const offsetInput     = document.getElementById('offset-mm');
+const geminiKeyInput  = document.getElementById('gemini-key');
 const cvCanvas        = document.getElementById('cv-canvas');
 
 // Corrections
@@ -61,6 +62,7 @@ const correctionCanvas= document.getElementById('correction-canvas');
 
 // Enhanced preview
 const enhancedPane    = document.getElementById('enhanced-pane');
+const enhancedLabel   = document.getElementById('enhanced-label');
 const enhancedCanvas  = document.getElementById('enhanced-canvas');
 
 // Debug viewer
@@ -69,6 +71,15 @@ const canvasOriginal  = document.getElementById('canvas-original');
 const canvasOverlay   = document.getElementById('canvas-overlay');
 const toggleOriginal  = document.getElementById('toggle-original');
 const toggleOverlay   = document.getElementById('toggle-overlay');
+
+// ── Gemini API key persistence ─────────────────────────────────
+const GEMINI_KEY_STORAGE = 'foamcut_gemini_key';
+geminiKeyInput.value = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+geminiKeyInput.addEventListener('change', () => {
+  const key = geminiKeyInput.value.trim();
+  if (key) localStorage.setItem(GEMINI_KEY_STORAGE, key);
+  else localStorage.removeItem(GEMINI_KEY_STORAGE);
+});
 
 // ── File handling ──────────────────────────────────────────────
 function setFile(file) {
@@ -86,7 +97,7 @@ function setFile(file) {
 
   dropInner.classList.add('hidden');
   previewInner.classList.remove('hidden');
-  processSection.classList.remove('hidden');   // show step 3 with corrections
+  processSection.classList.remove('hidden');
   updateProcessBtn();
 }
 
@@ -134,13 +145,10 @@ function applyCorrectionsToCanvas(img, dest, corr) {
   ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-  const brightnessVal = 1 + (brightness / 100);
-  const contrastVal   = 1 + (contrast   / 100);
-
   dest.width  = rotW;
   dest.height = rotH;
   const dctx = dest.getContext('2d');
-  dctx.filter = `brightness(${brightnessVal}) contrast(${contrastVal})`;
+  dctx.filter = `brightness(${1 + brightness/100}) contrast(${1 + contrast/100})`;
   dctx.drawImage(off, 0, 0);
   dctx.filter = 'none';
 }
@@ -160,14 +168,10 @@ bindSlider(corrRotation,   valRotation,   v => `${v}°`,                       '
 bindSlider(corrThreshold,  valThreshold,  v => (v === 0 ? 'Auto' : `${v}`),  'threshold');
 
 resetCorrections.addEventListener('click', () => {
-  corrBrightness.value  = 0;
-  corrContrast.value    = 0;
-  corrRotation.value    = 0;
-  corrThreshold.value   = 0;
-  valBrightness.textContent = '0';
-  valContrast.textContent   = '0';
-  valRotation.textContent   = '0°';
-  valThreshold.textContent  = 'Auto';
+  corrBrightness.value = 0; corrContrast.value = 0;
+  corrRotation.value   = 0; corrThreshold.value = 0;
+  valBrightness.textContent = '0'; valContrast.textContent = '0';
+  valRotation.textContent = '0°'; valThreshold.textContent = 'Auto';
   state.corrections = { brightness: 0, contrast: 0, rotation: 0, threshold: 0 };
   renderCorrectionPreview();
 });
@@ -194,6 +198,84 @@ downloadDebugBtn.addEventListener('click', () => {
   if (parseFloat(canvasOverlay.style.opacity  || 1) > 0) ctx.drawImage(canvasOverlay,  0, 0);
   comp.toBlob(blob => downloadBlob(blob, 'foamcut-debug.png'), 'image/png');
 });
+
+// ── Gemini AI Image Enhancement ────────────────────────────────
+const GEMINI_PROMPT = `Edit this photograph of tools laid on a grid mat.
+Convert to high-contrast grayscale.
+Make the background pure bright white.
+Make all tools solid dark black silhouettes with crisp edges.
+Preserve the exact positions, proportions, and shapes of all tools — do not move, resize, add, or remove any objects.
+The 5mm grid lines should remain faintly visible in the background.
+Remove any color cast, shadows, or uneven lighting.
+The result should look like a perfectly backlit photograph taken on a white light panel.`;
+
+async function enhanceWithGemini(canvas) {
+  const apiKey = geminiKeyInput.value.trim();
+  if (!apiKey) return null;
+
+  // Convert canvas to base64 JPEG (smaller than PNG for API transfer)
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  const base64  = dataUrl.split(',')[1];
+
+  const body = {
+    contents: [{
+      parts: [
+        { text: GEMINI_PROMPT },
+        { inlineData: { mimeType: 'image/jpeg', data: base64 } }
+      ]
+    }],
+    generationConfig: {
+      responseModalities: ['TEXT', 'IMAGE'],
+    }
+  };
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini API error (${res.status}): ${err}`);
+  }
+
+  const json = await res.json();
+  const parts = json.candidates?.[0]?.content?.parts;
+  if (!parts) throw new Error('Gemini returned no content');
+
+  const imagePart = parts.find(p => p.inlineData);
+  if (!imagePart) throw new Error('Gemini returned no image — try a different photo');
+
+  // Decode the returned base64 image into an HTMLImageElement
+  const returnedImg = await loadImage(null,
+    `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
+  );
+  return returnedImg;
+}
+
+// ── CLAHE local fallback ───────────────────────────────────────
+function autoEnhanceCLAHE(rgbaMat) {
+  const gray = new cv.Mat();
+  cv.cvtColor(rgbaMat, gray, cv.COLOR_RGBA2GRAY);
+
+  const clahe = cv.createCLAHE(3.0, new cv.Size(8, 8));
+  const claheOut = new cv.Mat();
+  clahe.apply(gray, claheOut);
+  clahe.delete(); gray.delete();
+
+  const norm = new cv.Mat();
+  cv.normalize(claheOut, norm, 0, 255, cv.NORM_MINMAX, cv.CV_8U);
+  claheOut.delete();
+
+  const rgba = new cv.Mat();
+  cv.cvtColor(norm, rgba, cv.COLOR_GRAY2RGBA);
+  norm.delete();
+  return rgba;
+}
 
 // ── Main process ───────────────────────────────────────────────
 processBtn.addEventListener('click', runPipeline);
@@ -227,26 +309,55 @@ async function runPipelineInner() {
   const heightIn = parseFloat(heightInput.value) || 14;
   const offsetMm = parseFloat(offsetInput.value) ?? 2;
 
-  // ── Load image with corrections baked in ──────────────────
+  // ── Step 1: Load image with user corrections ──────────────
   const img = await loadImage(state.file);
   applyCorrectionsToCanvas(img, cvCanvas, state.corrections);
-  const raw = cv.imread(cvCanvas);
 
-  // ── Auto-enhance: grayscale → CLAHE → normalize ────────────
-  const src = autoEnhance(raw);
-  raw.delete();
+  // ── Step 2: Gemini enhancement (or CLAHE fallback) ────────
+  let src;
+  const apiKey = geminiKeyInput.value.trim();
 
-  // Show enhanced preview next to the user's upload
+  if (apiKey) {
+    btnLabel.textContent = 'Enhancing with Gemini…';
+    try {
+      const enhanced = await enhanceWithGemini(cvCanvas);
+      if (enhanced) {
+        // Draw Gemini result onto cvCanvas so OpenCV can read it
+        cvCanvas.width  = enhanced.naturalWidth;
+        cvCanvas.height = enhanced.naturalHeight;
+        cvCanvas.getContext('2d').drawImage(enhanced, 0, 0);
+        src = cv.imread(cvCanvas);
+        enhancedLabel.textContent = 'Gemini enhanced';
+      }
+    } catch (err) {
+      console.warn('Gemini enhancement failed, falling back to CLAHE:', err);
+      enhancedLabel.textContent = 'CLAHE fallback (Gemini failed)';
+      const raw = cv.imread(cvCanvas);
+      src = autoEnhanceCLAHE(raw);
+      raw.delete();
+    }
+  }
+
+  if (!src) {
+    enhancedLabel.textContent = 'CLAHE enhanced (no API key)';
+    const raw = cv.imread(cvCanvas);
+    src = autoEnhanceCLAHE(raw);
+    raw.delete();
+  }
+
+  // Show enhanced preview side-by-side
   cv.imshow(enhancedCanvas, src);
   enhancedPane.classList.remove('hidden');
 
-  // ── Grid calibration ───────────────────────────────────────
+  btnLabel.textContent = 'Detecting tools…';
+
+  // ── Step 3: Grid calibration ──────────────────────────────
   const pixPerMm = detectGridScale(src);
   const mmWidth  = widthIn  * 25.4;
   const mmHeight = heightIn * 25.4;
   const pxPerMm  = pixPerMm ?? Math.min(src.cols / mmWidth, src.rows / mmHeight);
 
-  // ── Segmentation ───────────────────────────────────────────
+  // ── Step 4: Segmentation ──────────────────────────────────
   const gray = new cv.Mat();
   cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
@@ -269,7 +380,6 @@ async function runPipelineInner() {
   const hierarchy = new cv.Mat();
   cv.findContours(closed, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-  // Keep all contours in a reasonable size range — no overlap skipping
   const minAreaPx = 100 * pxPerMm * pxPerMm;
   const maxAreaPx = src.cols * src.rows * 0.95;
 
@@ -284,34 +394,29 @@ async function runPipelineInner() {
     }
   }
 
-  // ── Smooth & build SVG — ALL valid contours processed ─────
+  // ── Step 5: Smooth & build SVG ────────────────────────────
   const smoothed = validContours.map(c => smoothContour(c, pxPerMm));
 
   const svgString = buildSVG({
-    tools: smoothed,
-    pxPerMm,
-    drawerWidthMm:  mmWidth,
-    drawerHeightMm: mmHeight,
-    offsetMm,
-    imgWidth:  src.cols,
-    imgHeight: src.rows,
+    tools: smoothed, pxPerMm,
+    drawerWidthMm: mmWidth, drawerHeightMm: mmHeight,
+    offsetMm, imgWidth: src.cols, imgHeight: src.rows,
   });
   state.svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
 
-  // ── Debug layers (original = enhanced image, overlay = contours)
+  // ── Debug layers ──────────────────────────────────────────
   cv.imshow(canvasOriginal, src);
   renderOverlayLayer({ src, smoothed, canvas: canvasOverlay });
 
-  // ── Cleanup ────────────────────────────────────────────────
+  // ── Cleanup ───────────────────────────────────────────────
   src.delete(); gray.delete(); blurred.delete(); binary.delete();
   kernel.delete(); closed.delete(); contours.delete(); hierarchy.delete();
 
-  // ── Show results ───────────────────────────────────────────
-  const calibNote = pixPerMm
-    ? `Grid: ${pixPerMm.toFixed(1)} px/mm`
-    : 'Scale: estimated from dimensions';
+  // ── Show results ──────────────────────────────────────────
+  const calibNote = pixPerMm ? `Grid: ${pixPerMm.toFixed(1)} px/mm` : 'Scale: estimated from dimensions';
+  const enhanceNote = apiKey ? 'Gemini' : 'CLAHE';
   toolCountLabel.textContent =
-    `${smoothed.length} tool${smoothed.length !== 1 ? 's' : ''} detected · ${calibNote}`;
+    `${smoothed.length} tool${smoothed.length !== 1 ? 's' : ''} · ${enhanceNote} · ${calibNote}`;
 
   setLayerVisible(canvasOriginal, toggleOriginal, true);
   setLayerVisible(canvasOverlay,  toggleOverlay,  true);
@@ -319,59 +424,18 @@ async function runPipelineInner() {
   debugViewer.classList.remove('hidden');
   downloadDebugBtn.classList.remove('hidden');
   resultsSection.classList.remove('hidden');
-
-  // Refresh correction preview to reflect what was actually processed
   renderCorrectionPreview();
 }
 
-// ── Layer renderers ────────────────────────────────────────────
+// ── Layer renderer ─────────────────────────────────────────────
 function renderOverlayLayer({ src, smoothed, canvas }) {
   const overlay = new cv.Mat(src.rows, src.cols, cv.CV_8UC4, new cv.Scalar(0, 0, 0, 0));
-
   const vec = new cv.MatVector();
   smoothed.forEach(c => vec.push_back(c));
-  if (vec.size() > 0) {
-    cv.drawContours(overlay, vec, -1, new cv.Scalar(52, 211, 153, 255), 3);
-  }
-
-  canvas.width  = src.cols;
-  canvas.height = src.rows;
+  if (vec.size() > 0) cv.drawContours(overlay, vec, -1, new cv.Scalar(52, 211, 153, 255), 3);
+  canvas.width = src.cols; canvas.height = src.rows;
   cv.imshow(canvas, overlay);
-
-  overlay.delete();
-  vec.delete();
-}
-
-// ── Auto-Enhance ───────────────────────────────────────────────
-// Converts any raw photo to a high-contrast grayscale image that
-// looks like it was shot on a bright backlit 5mm grid panel:
-//   1. Grayscale — strips color cast from panel lighting
-//   2. CLAHE     — adaptive local contrast, brings grid + edges forward
-//   3. Normalize — stretches histogram to full 0-255 range (whites → white, blacks → black)
-//   4. Back to RGBA so OpenCV and Canvas can both use the result
-function autoEnhance(rgbaMat) {
-  // 1. Grayscale
-  const gray = new cv.Mat();
-  cv.cvtColor(rgbaMat, gray, cv.COLOR_RGBA2GRAY);
-
-  // 2. CLAHE — clip limit 3, 8×8 tile grid
-  const clahe = cv.createCLAHE(3.0, new cv.Size(8, 8));
-  const claheOut = new cv.Mat();
-  clahe.apply(gray, claheOut);
-  clahe.delete();
-  gray.delete();
-
-  // 3. Normalize to [0, 255]
-  const normalized = new cv.Mat();
-  cv.normalize(claheOut, normalized, 0, 255, cv.NORM_MINMAX, cv.CV_8U);
-  claheOut.delete();
-
-  // 4. RGBA for display + downstream use
-  const rgba = new cv.Mat();
-  cv.cvtColor(normalized, rgba, cv.COLOR_GRAY2RGBA);
-  normalized.delete();
-
-  return rgba;
+  overlay.delete(); vec.delete();
 }
 
 // ── Grid Scale Detection ───────────────────────────────────────
@@ -381,18 +445,16 @@ function detectGridScale(src) {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
     const bright = new cv.Mat();
     cv.threshold(gray, bright, 200, 255, cv.THRESH_BINARY);
-
     const rows = bright.rows, cols = bright.cols;
+
     const rowSums = [];
     for (let r = 0; r < rows; r++) {
-      let s = 0;
-      for (let c = 0; c < cols; c++) s += bright.ucharPtr(r, c)[0];
+      let s = 0; for (let c = 0; c < cols; c++) s += bright.ucharPtr(r, c)[0];
       rowSums.push(s / 255);
     }
     const colSums = [];
     for (let c = 0; c < cols; c++) {
-      let s = 0;
-      for (let r = 0; r < rows; r++) s += bright.ucharPtr(r, c)[0];
+      let s = 0; for (let r = 0; r < rows; r++) s += bright.ucharPtr(r, c)[0];
       colSums.push(s / 255);
     }
     gray.delete(); bright.delete();
@@ -427,9 +489,7 @@ function smoothContour(contour, pxPerMm) {
 
 // ── SVG Generation ─────────────────────────────────────────────
 function buildSVG({ tools, pxPerMm, drawerWidthMm, drawerHeightMm, offsetMm, imgWidth, imgHeight }) {
-  const scaleX = drawerWidthMm  / imgWidth;
-  const scaleY = drawerHeightMm / imgHeight;
-
+  const scaleX = drawerWidthMm / imgWidth, scaleY = drawerHeightMm / imgHeight;
   const svgTools = tools.map((contour, idx) => {
     const pts = [];
     for (let i = 0; i < contour.rows; i++) {
@@ -437,7 +497,7 @@ function buildSVG({ tools, pxPerMm, drawerWidthMm, drawerHeightMm, offsetMm, img
     }
     return `
   <g id="tool-${idx+1}" class="tool">
-    <path class="exact"  d="${pointsToPath(pts)}"                    fill="none" stroke="#1a1a2e" stroke-width="0.3"/>
+    <path class="exact"  d="${pointsToPath(pts)}" fill="none" stroke="#1a1a2e" stroke-width="0.3"/>
     <path class="offset" d="${pointsToPath(offsetPolygon(pts, offsetMm))}" fill="none" stroke="#4f7cff" stroke-width="0.3" stroke-dasharray="1 0.5"/>
   </g>`;
   }).join('\n');
@@ -486,11 +546,11 @@ function downloadBlob(blob, filename) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────
-function loadImage(file) {
+function loadImage(file, dataUrl) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    img.src = dataUrl || URL.createObjectURL(file);
   });
 }

@@ -349,6 +349,8 @@ input[type="range"]::-moz-range-thumb {
   align-items: start;
 }
 
+.span-full { grid-column: 1 / -1; }
+
 @media (max-width: 480px) {
   .settings-grid { grid-template-columns: 1fr; }
 }
@@ -375,7 +377,27 @@ input[type="number"] {
   transition: border-color 0.15s;
 }
 
-input[type="number"]:focus { border-color: var(--accent); }
+input[type="number"]:focus,
+input[type="password"]:focus { border-color: var(--accent); }
+
+input[type="password"] {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: monospace;
+}
+
+small a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 small { font-size: 0.75rem; color: var(--muted); }
 

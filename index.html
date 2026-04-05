@@ -36,7 +36,7 @@
 
       <!-- Step 2: Settings -->
       <section class="card" id="settings-section">
-        <h2><span class="step">2</span> Drawer Dimensions</h2>
+        <h2><span class="step">2</span> Settings</h2>
         <div class="settings-grid">
           <label>
             <span>Drawer width (inches)</span>
@@ -50,6 +50,13 @@
             <span>Foam offset (mm)</span>
             <input type="number" id="offset-mm" min="0" max="20" step="0.5" value="2" />
             <small>Outward pocket clearance</small>
+          </label>
+          <label class="span-full">
+            <span>Gemini API key</span>
+            <input type="password" id="gemini-key" placeholder="AIza…" autocomplete="off" />
+            <small>Stored in your browser only — never sent anywhere but Google.
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a free key</a>
+            </small>
           </label>
         </div>
       </section>
@@ -97,7 +104,7 @@
 
         </div>
 
-        <!-- Live corrected preview -->
+        <!-- Before / After preview -->
         <div class="preview-pair">
           <div class="preview-pane">
             <div class="preview-label">Your upload</div>
@@ -106,7 +113,7 @@
             </div>
           </div>
           <div class="preview-pane hidden" id="enhanced-pane">
-            <div class="preview-label enhanced-badge">Auto-enhanced</div>
+            <div class="preview-label enhanced-badge" id="enhanced-label">Gemini enhanced</div>
             <div class="correction-preview">
               <canvas id="enhanced-canvas"></canvas>
             </div>
@@ -140,7 +147,7 @@
           <div class="layer-toolbar">
             <span class="toolbar-label">Layers</span>
             <button class="layer-btn active" id="toggle-original" data-layer="original">
-              <span class="layer-dot dot-original"></span> Original photo
+              <span class="layer-dot dot-original"></span> Enhanced photo
             </button>
             <button class="layer-btn active" id="toggle-overlay" data-layer="overlay">
               <span class="layer-dot dot-overlay"></span> Outline overlay
@@ -155,7 +162,7 @@
     </main>
 
     <footer>
-      <p>Runs entirely in your browser — no uploads, no server.</p>
+      <p>Runs entirely in your browser — images are sent to Google Gemini for enhancement, then processed locally.</p>
     </footer>
   </div>
 
