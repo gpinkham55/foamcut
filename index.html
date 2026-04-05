@@ -98,8 +98,19 @@
         </div>
 
         <!-- Live corrected preview -->
-        <div class="correction-preview">
-          <canvas id="correction-canvas"></canvas>
+        <div class="preview-pair">
+          <div class="preview-pane">
+            <div class="preview-label">Your upload</div>
+            <div class="correction-preview">
+              <canvas id="correction-canvas"></canvas>
+            </div>
+          </div>
+          <div class="preview-pane hidden" id="enhanced-pane">
+            <div class="preview-label enhanced-badge">Auto-enhanced</div>
+            <div class="correction-preview">
+              <canvas id="enhanced-canvas"></canvas>
+            </div>
+          </div>
         </div>
 
         <!-- Process row -->

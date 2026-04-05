@@ -59,6 +59,10 @@ const valThreshold    = document.getElementById('val-threshold');
 const resetCorrections= document.getElementById('reset-corrections');
 const correctionCanvas= document.getElementById('correction-canvas');
 
+// Enhanced preview
+const enhancedPane    = document.getElementById('enhanced-pane');
+const enhancedCanvas  = document.getElementById('enhanced-canvas');
+
 // Debug viewer
 const debugViewer     = document.getElementById('debug-viewer');
 const canvasOriginal  = document.getElementById('canvas-original');
@@ -199,6 +203,7 @@ async function runPipeline() {
 
   resultsSection.classList.add('hidden');
   debugViewer.classList.add('hidden');
+  enhancedPane.classList.add('hidden');
   state.svgBlob = null;
 
   btnLabel.textContent = 'Processing…';
@@ -225,7 +230,15 @@ async function runPipelineInner() {
   // ── Load image with corrections baked in ──────────────────
   const img = await loadImage(state.file);
   applyCorrectionsToCanvas(img, cvCanvas, state.corrections);
-  const src = cv.imread(cvCanvas);
+  const raw = cv.imread(cvCanvas);
+
+  // ── Auto-enhance: grayscale → CLAHE → normalize ────────────
+  const src = autoEnhance(raw);
+  raw.delete();
+
+  // Show enhanced preview next to the user's upload
+  cv.imshow(enhancedCanvas, src);
+  enhancedPane.classList.remove('hidden');
 
   // ── Grid calibration ───────────────────────────────────────
   const pixPerMm = detectGridScale(src);
@@ -285,8 +298,8 @@ async function runPipelineInner() {
   });
   state.svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
 
-  // ── Debug layers ───────────────────────────────────────────
-  renderOriginalLayer(img, canvasOriginal);
+  // ── Debug layers (original = enhanced image, overlay = contours)
+  cv.imshow(canvasOriginal, src);
   renderOverlayLayer({ src, smoothed, canvas: canvasOverlay });
 
   // ── Cleanup ────────────────────────────────────────────────
@@ -312,12 +325,6 @@ async function runPipelineInner() {
 }
 
 // ── Layer renderers ────────────────────────────────────────────
-function renderOriginalLayer(img, canvas) {
-  canvas.width  = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  canvas.getContext('2d').drawImage(img, 0, 0);
-}
-
 function renderOverlayLayer({ src, smoothed, canvas }) {
   const overlay = new cv.Mat(src.rows, src.cols, cv.CV_8UC4, new cv.Scalar(0, 0, 0, 0));
 
@@ -333,6 +340,38 @@ function renderOverlayLayer({ src, smoothed, canvas }) {
 
   overlay.delete();
   vec.delete();
+}
+
+// ── Auto-Enhance ───────────────────────────────────────────────
+// Converts any raw photo to a high-contrast grayscale image that
+// looks like it was shot on a bright backlit 5mm grid panel:
+//   1. Grayscale — strips color cast from panel lighting
+//   2. CLAHE     — adaptive local contrast, brings grid + edges forward
+//   3. Normalize — stretches histogram to full 0-255 range (whites → white, blacks → black)
+//   4. Back to RGBA so OpenCV and Canvas can both use the result
+function autoEnhance(rgbaMat) {
+  // 1. Grayscale
+  const gray = new cv.Mat();
+  cv.cvtColor(rgbaMat, gray, cv.COLOR_RGBA2GRAY);
+
+  // 2. CLAHE — clip limit 3, 8×8 tile grid
+  const clahe = cv.createCLAHE(3.0, new cv.Size(8, 8));
+  const claheOut = new cv.Mat();
+  clahe.apply(gray, claheOut);
+  clahe.delete();
+  gray.delete();
+
+  // 3. Normalize to [0, 255]
+  const normalized = new cv.Mat();
+  cv.normalize(claheOut, normalized, 0, 255, cv.NORM_MINMAX, cv.CV_8U);
+  claheOut.delete();
+
+  // 4. RGBA for display + downstream use
+  const rgba = new cv.Mat();
+  cv.cvtColor(normalized, rgba, cv.COLOR_GRAY2RGBA);
+  normalized.delete();
+
+  return rgba;
 }
 
 // ── Grid Scale Detection ───────────────────────────────────────
